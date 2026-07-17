@@ -1,0 +1,39 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-app-background: #016551;
+  --color-app-ring: #04745d;
+  --color-app-ring-outer: #008c6c;
+  --font-timer: 'Iowan Old Style', Baskerville, 'Times New Roman', serif;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    width: 100%;
+  }
+
+  body {
+    @apply bg-app-background font-mono;
+  }
+}
+
+@layer components {
+  .tracker-handle {
+    offset-path: path('M 30 194 A 150 150 0 0 1 330 194');
+    offset-rotate: auto 90deg;
+    transition: transform 150ms ease-out;
+  }
+
+  .tracker-handle[data-dragging='true'] {
+    transform: scale(1.25);
+    transition: transform 150ms ease-out;
+  }
+}
