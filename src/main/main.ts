@@ -40,6 +40,7 @@ function createPopover(): void {
     resizable: false,
     show: false,
     skipTaskbar: true,
+    type: 'panel',
     width: 360,
     webPreferences: {
       contextIsolation: true,
