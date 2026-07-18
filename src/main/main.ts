@@ -23,15 +23,34 @@ import { Timer } from './timer';
 
 const popoverBackground = '#016551';
 let menuBar: Tray;
-let popover: BrowserWindow;
-let quitting = false;
+let popover: BrowserWindow | null = null;
 
 if (process.platform === 'darwin') {
   app.setActivationPolicy('accessory');
 }
 
-function createPopover(): void {
-  popover = new BrowserWindow({
+app.on('window-all-closed', () => {
+  // Popup windows are disposable; only an explicit quit stops the tray app.
+});
+
+function destroyPopover(window: BrowserWindow): void {
+  if (popover === window) {
+    popover = null;
+  }
+
+  if (!window.isDestroyed()) {
+    window.destroy();
+  }
+}
+
+function destroyCurrentPopover(): void {
+  if (popover !== null) {
+    destroyPopover(popover);
+  }
+}
+
+function createPopover(showSettings: boolean): BrowserWindow {
+  const nextPopover = new BrowserWindow({
     alwaysOnTop: true,
     backgroundColor: popoverBackground,
     frame: false,
@@ -40,7 +59,6 @@ function createPopover(): void {
     resizable: false,
     show: false,
     skipTaskbar: true,
-    type: 'panel',
     width: 360,
     webPreferences: {
       contextIsolation: true,
@@ -50,28 +68,39 @@ function createPopover(): void {
     },
   });
 
-  popover.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  popover = nextPopover;
+
+  nextPopover.webContents.once('did-finish-load', () => {
+    if (showSettings && !nextPopover.isDestroyed()) {
+      nextPopover.webContents.send('app:showSettings');
+    }
+  });
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    void popover.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+    void nextPopover.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
-    void popover.loadFile(
+    void nextPopover.loadFile(
       path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
     );
   }
 
-  popover.on('blur', () => popover.hide());
-  popover.on('close', (event) => {
-    if (!quitting) {
-      event.preventDefault();
-      popover.hide();
+  nextPopover.on('closed', () => {
+    if (popover === nextPopover) {
+      popover = null;
     }
   });
+
+  return nextPopover;
 }
 
-function showPopover(): void {
+function showPopover(showSettings: boolean): void {
+  if (popover !== null) {
+    destroyPopover(popover);
+  }
+
+  const nextPopover = createPopover(showSettings);
   const trayBounds = menuBar.getBounds();
-  const windowBounds = popover.getBounds();
+  const windowBounds = nextPopover.getBounds();
   const workArea = screen.getDisplayNearestPoint({
     x: trayBounds.x,
     y: trayBounds.y,
@@ -84,18 +113,18 @@ function showPopover(): void {
     ),
   );
 
-  popover.setPosition(x, workArea.y);
-  popover.show();
-  popover.focus();
+  nextPopover.setPosition(x, workArea.y);
+  nextPopover.show();
+  nextPopover.focus();
 }
 
 function togglePopover(): void {
-  if (popover.isVisible()) {
-    popover.hide();
+  if (popover !== null) {
+    destroyPopover(popover);
     return;
   }
 
-  showPopover();
+  showPopover(false);
 }
 
 function updateMenuBar(state: TimerState): void {
@@ -192,13 +221,13 @@ app.whenReady().then(() => {
   updateMenuBar(initialState);
   menuBar.on('click', togglePopover);
   menuBar.on('right-click', () => {
+    destroyCurrentPopover();
     menuBar.popUpContextMenu(
       Menu.buildFromTemplate([
         {
           label: 'Settings',
           click: () => {
-            showPopover();
-            popover.webContents.send('app:showSettings');
+            showPopover(true);
           },
         },
         {
@@ -209,8 +238,6 @@ app.whenReady().then(() => {
     );
   });
 
-  createPopover();
-
   setInterval(() => {
     const currentTime = Date.now();
     const completedPhase = timer.tick(currentTime);
@@ -218,13 +245,13 @@ app.whenReady().then(() => {
       const state = save(currentTime);
       showCompletion(completedPhase, state.phase);
       updateMenuBar(state);
-      popover.webContents.send('timer:stateChanged', state);
+      if (popover !== null && !popover.webContents.isLoading()) {
+        popover.webContents.send('timer:stateChanged', state);
+      }
       return;
     }
     updateMenuBar(timer.getState(currentTime));
   }, 1000);
 });
 
-app.on('before-quit', () => {
-  quitting = true;
-});
+app.on('did-resign-active', destroyCurrentPopover);
