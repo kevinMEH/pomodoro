@@ -253,7 +253,7 @@ export function RadialTimer({
         </g>
       </svg>
 
-      <div className="absolute inset-x-0 bottom-9 text-center">
+      <div className="pointer-events-none absolute inset-x-0 bottom-9 text-center">
         <p className="font-timer text-5xl font-medium tracking-tight tabular-nums">
           {time}
         </p>
